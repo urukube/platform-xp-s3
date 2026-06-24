@@ -4,7 +4,7 @@ Crossplane XRD package that provides a self-service S3 bucket golden path for th
 
 ## What gets provisioned
 
-Every `S3Bucket` claim creates four AWS resources in the target account:
+Every `US3Bucket` claim creates four AWS resources in the target account:
 
 | Resource | Configurable |
 |---|---|
@@ -90,5 +90,5 @@ Each target AWS account must have a role named `urukube-crossplane-role` with:
 | File | Purpose |
 |---|---|
 | `provider.yaml` | Installs `upbound-provider-aws-s3:v1.21.0`; references the `provider-aws-irsa` DeploymentRuntimeConfig created by `orchestrator-custom-addons` |
-| `xrd.yaml` | Defines the `XS3Bucket` / `S3Bucket` API and parameter schema |
+| `xrd.yaml` | Defines the `XUS3Bucket` / `US3Bucket` API and parameter schema |
 | `composition.yaml` | Maps a claim to the four AWS resources and the per-claim ProviderConfig |
