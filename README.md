@@ -64,23 +64,12 @@ Each target AWS account must have a role named `urukube-crossplane-role` with:
 }
 ```
 
-2. **Permissions** — at minimum:
+2. **Permissions** — the Upbound S3 provider reads many bucket attributes on every reconcile pass (ACL, CORS, website, logging, replication, etc.), so `s3:*` is required:
 
 ```json
 {
   "Effect": "Allow",
-  "Action": [
-    "s3:CreateBucket",
-    "s3:DeleteBucket",
-    "s3:GetBucketVersioning",
-    "s3:PutBucketVersioning",
-    "s3:GetEncryptionConfiguration",
-    "s3:PutEncryptionConfiguration",
-    "s3:GetBucketPublicAccessBlock",
-    "s3:PutBucketPublicAccessBlock",
-    "s3:GetBucketTagging",
-    "s3:PutBucketTagging"
-  ],
+  "Action": "s3:*",
   "Resource": "*"
 }
 ```
