@@ -28,7 +28,12 @@ spec:
                   type: object
                   required:
                     - region
+                    - awsAccountId
                   properties:
+                    awsAccountId:
+                      type: string
+                      description: AWS account ID where the S3 bucket will be created
+                      pattern: "^[0-9]{12}$"
                     region:
                       type: string
                       description: AWS region where the S3 bucket will be created

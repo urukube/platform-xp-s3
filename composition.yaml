@@ -11,6 +11,34 @@ spec:
     kind: XS3Bucket
   resources:
     # -------------------------------------------------------------------------
+    # ProviderConfig — one per composite, assumes urukube-crossplane-role in
+    # the target account via IRSA chained role assumption.
+    # -------------------------------------------------------------------------
+    - name: provider-config
+      base:
+        apiVersion: aws.upbound.io/v1beta1
+        kind: ProviderConfig
+        spec:
+          credentials:
+            source: IRSA
+          assumeRoleChain:
+            - roleARN: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.awsAccountId
+          toFieldPath: spec.assumeRoleChain[0].roleARN
+          transforms:
+            - type: string
+              string:
+                type: Format
+                fmt: "arn:aws:iam::%s:role/urukube-crossplane-role"
+      readinessChecks:
+        - type: None
+
+    # -------------------------------------------------------------------------
     # Bucket — the core S3 bucket resource.
     # The composite resource name becomes the bucket name via external-name.
     # -------------------------------------------------------------------------
@@ -28,6 +56,9 @@ spec:
         - type: FromCompositeFieldPath
           fromFieldPath: metadata.name
           toFieldPath: metadata.annotations["crossplane.io/external-name"]
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
 
     # -------------------------------------------------------------------------
     # Encryption — SSE-S3 (AES256) always enabled. Non-configurable by design.
@@ -49,6 +80,9 @@ spec:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.region
           toFieldPath: spec.forProvider.region
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
 
     # -------------------------------------------------------------------------
     # Versioning — toggleable via spec.parameters.versioning (default: false).
@@ -79,6 +113,9 @@ spec:
               map:
                 "true": Enabled
                 "false": Suspended
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
 
     # -------------------------------------------------------------------------
     # Public access block — all public access blocked. Non-configurable by design.
@@ -100,3 +137,6 @@ spec:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.region
           toFieldPath: spec.forProvider.region
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name

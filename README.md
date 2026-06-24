@@ -1,0 +1,94 @@
+# platform-xp-s3
+
+Crossplane XRD package that provides a self-service S3 bucket golden path for the `urukube` platform. ArgoCD auto-discovers this repo via the `platform-custom-xrds` GitHub topic and deploys it to `crossplane-system` on the orchestrator cluster.
+
+## What gets provisioned
+
+Every `S3Bucket` claim creates four AWS resources in the target account:
+
+| Resource | Configurable |
+|---|---|
+| S3 Bucket | Name (from claim name), region, account |
+| Server-side encryption (AES256) | No — always enabled |
+| Versioning | Yes — `spec.parameters.versioning` |
+| Public access block (all four flags) | No — always blocked |
+
+## Parameters
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `spec.parameters.awsAccountId` | Yes | — | 12-digit AWS account ID to create the bucket in |
+| `spec.parameters.region` | Yes | — | AWS region (e.g. `us-east-1`) |
+| `spec.parameters.versioning` | No | `false` | Enable S3 versioning |
+| `spec.parameters.tags` | No | — | Additional tags as key-value pairs |
+
+The bucket name is taken from `metadata.name` of the claim.
+
+## Example claim
+
+```yaml
+apiVersion: storage.platform.urukube.io/v1alpha1
+kind: S3Bucket
+metadata:
+  name: my-app-assets
+  namespace: my-team
+spec:
+  parameters:
+    awsAccountId: "123456789012"
+    region: us-east-1
+    versioning: true
+    tags:
+      team: platform
+      env: prod
+```
+
+## Cross-account setup
+
+The Composition dynamically creates an `aws.upbound.io/v1beta1 ProviderConfig` per claim that chains the orchestrator's IRSA role into the target account:
+
+```
+Orchestrator IRSA role → sts:AssumeRole → arn:aws:iam::<awsAccountId>:role/urukube-crossplane-role
+```
+
+Each target AWS account must have a role named `urukube-crossplane-role` with:
+
+1. **Trust policy** — allows the orchestrator's Crossplane IRSA role to assume it:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::<orchestrator-account-id>:role/<crossplane-irsa-role-name>"
+  },
+  "Action": "sts:AssumeRole"
+}
+```
+
+2. **Permissions** — at minimum:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "s3:CreateBucket",
+    "s3:DeleteBucket",
+    "s3:GetBucketVersioning",
+    "s3:PutBucketVersioning",
+    "s3:GetEncryptionConfiguration",
+    "s3:PutEncryptionConfiguration",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:PutBucketPublicAccessBlock",
+    "s3:GetBucketTagging",
+    "s3:PutBucketTagging"
+  ],
+  "Resource": "*"
+}
+```
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `provider.yaml` | Installs `upbound-provider-aws-s3:v1.21.0`; references the `provider-aws-irsa` DeploymentRuntimeConfig created by `orchestrator-custom-addons` |
+| `xrd.yaml` | Defines the `XS3Bucket` / `S3Bucket` API and parameter schema |
+| `composition.yaml` | Maps a claim to the four AWS resources and the per-claim ProviderConfig |
