@@ -2,13 +2,13 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: xs3buckets.storage.platform.urukube.io
+  name: xus3buckets.storage.platform.urukube.io
   labels:
     provider: aws
 spec:
   compositeTypeRef:
     apiVersion: storage.platform.urukube.io/v1alpha1
-    kind: XS3Bucket
+    kind: XUS3Bucket
   resources:
     # -------------------------------------------------------------------------
     # ProviderConfig — one per composite, assumes urukube-crossplane-role in

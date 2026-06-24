@@ -2,15 +2,15 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xs3buckets.storage.platform.urukube.io
+  name: xus3buckets.storage.platform.urukube.io
 spec:
   group: storage.platform.urukube.io
   names:
-    kind: XS3Bucket
-    plural: xs3buckets
+    kind: XUS3Bucket
+    plural: xus3buckets
   claimNames:
-    kind: S3Bucket
-    plural: s3buckets
+    kind: US3Bucket
+    plural: us3buckets
   versions:
     - name: v1alpha1
       served: true

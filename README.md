@@ -28,7 +28,7 @@ The bucket name is taken from `metadata.name` of the claim.
 
 ```yaml
 apiVersion: storage.platform.urukube.io/v1alpha1
-kind: S3Bucket
+kind: US3Bucket
 metadata:
   name: my-app-assets
   namespace: my-team
