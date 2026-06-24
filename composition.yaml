@@ -1,0 +1,102 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xs3buckets.storage.platform.urukube.io
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: storage.platform.urukube.io/v1alpha1
+    kind: XS3Bucket
+  resources:
+    # -------------------------------------------------------------------------
+    # Bucket — the core S3 bucket resource.
+    # The composite resource name becomes the bucket name via external-name.
+    # -------------------------------------------------------------------------
+    - name: bucket
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta2
+        kind: Bucket
+        spec:
+          forProvider:
+            region: us-east-1
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+
+    # -------------------------------------------------------------------------
+    # Encryption — SSE-S3 (AES256) always enabled. Non-configurable by design.
+    # -------------------------------------------------------------------------
+    - name: bucket-encryption
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketServerSideEncryptionConfiguration
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            rule:
+              - applyServerSideEncryptionByDefault:
+                  - sseAlgorithm: AES256
+                bucketKeyEnabled: true
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region
+
+    # -------------------------------------------------------------------------
+    # Versioning — toggleable via spec.parameters.versioning (default: false).
+    # -------------------------------------------------------------------------
+    - name: bucket-versioning
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketVersioning
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            versioningConfiguration:
+              - status: Suspended
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.versioning
+          toFieldPath: spec.forProvider.versioningConfiguration[0].status
+          transforms:
+            - type: convert
+              convert:
+                toType: string
+            - type: map
+              map:
+                "true": Enabled
+                "false": Suspended
+
+    # -------------------------------------------------------------------------
+    # Public access block — all public access blocked. Non-configurable by design.
+    # -------------------------------------------------------------------------
+    - name: bucket-public-access-block
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPublicAccessBlock
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            blockPublicAcls: true
+            blockPublicPolicy: true
+            ignorePublicAcls: true
+            restrictPublicBuckets: true
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region

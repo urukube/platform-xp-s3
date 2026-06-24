@@ -1,0 +1,43 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xs3buckets.storage.platform.urukube.io
+spec:
+  group: storage.platform.urukube.io
+  names:
+    kind: XS3Bucket
+    plural: xs3buckets
+  claimNames:
+    kind: S3Bucket
+    plural: s3buckets
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - parameters
+              properties:
+                parameters:
+                  type: object
+                  required:
+                    - region
+                  properties:
+                    region:
+                      type: string
+                      description: AWS region where the S3 bucket will be created
+                    versioning:
+                      type: boolean
+                      default: false
+                      description: Enable S3 versioning on the bucket
+                    tags:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: Additional tags to apply to the bucket
