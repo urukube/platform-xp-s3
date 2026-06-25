@@ -9,17 +9,6 @@ spec:
   compositeTypeRef:
     apiVersion: storage.platform.urukube.io/v1alpha1
     kind: XUS3Bucket
-  environment:
-    environmentConfigs:
-      - type: Reference
-        ref:
-          name: org-defaults
-      - type: Selector
-        selector:
-          matchLabels:
-            - key: bu-id
-              type: FromCompositeFieldPath
-              valueFromFieldPath: spec.parameters.buId
   resources:
     # -------------------------------------------------------------------------
     # ProviderConfig — one per composite, assumes urukube-crossplane-role in
@@ -70,24 +59,6 @@ spec:
         - type: FromCompositeFieldPath
           fromFieldPath: metadata.name
           toFieldPath: spec.providerConfigRef.name
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: buId
-          toFieldPath: spec.forProvider.tags.BuId
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: costCenter
-          toFieldPath: spec.forProvider.tags.CostCenter
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: ownerEmail
-          toFieldPath: spec.forProvider.tags.OwnerEmail
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: orgName
-          toFieldPath: spec.forProvider.tags.OrgName
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: complianceScope
-          toFieldPath: spec.forProvider.tags.ComplianceScope
-        - type: FromEnvironmentFieldPath
-          fromFieldPath: managedBy
-          toFieldPath: spec.forProvider.tags.ManagedBy
 
     # -------------------------------------------------------------------------
     # Encryption — SSE-S3 (AES256) always enabled. Non-configurable by design.
