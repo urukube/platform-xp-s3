@@ -90,7 +90,7 @@ spec:
                 fromFieldPath: spec.parameters.region
                 toFieldPath: spec.forProvider.region
               - type: FromCompositeFieldPath
-                fromFieldPath: metadata.name
+                fromFieldPath: metadata.labels["crossplane.io/claim-name"]
                 toFieldPath: metadata.annotations["crossplane.io/external-name"]
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
