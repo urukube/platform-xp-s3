@@ -34,7 +34,7 @@ spec:
                     buId:
                       type: string
                       description: Business Unit identifier — must match an EnvironmentConfig with label bu-id
-                      pattern: "^[a-z][a-z0-9-]+$"
+                      pattern: "^BU[0-9]{3}$"
                     awsAccountId:
                       type: string
                       description: AWS account ID where the S3 bucket will be created
