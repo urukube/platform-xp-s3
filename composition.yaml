@@ -9,134 +9,188 @@ spec:
   compositeTypeRef:
     apiVersion: storage.platform.urukube.io/v1alpha1
     kind: XUS3Bucket
-  resources:
+  mode: Pipeline
+  pipeline:
     # -------------------------------------------------------------------------
-    # ProviderConfig — one per composite, assumes urukube-crossplane-role in
-    # the target account via IRSA chained role assumption.
+    # Step 1 — Resolve EnvironmentConfigs into the pipeline context.
+    # Merges org-defaults (static) with the BU-specific config selected by
+    # the bu-id label matching spec.parameters.buId from the claim.
     # -------------------------------------------------------------------------
-    - name: provider-config
-      base:
-        apiVersion: aws.upbound.io/v1beta1
-        kind: ProviderConfig
+    - step: resolve-environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
         spec:
-          credentials:
-            source: IRSA
-          assumeRoleChain:
-            - roleARN: placeholder
-      patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: metadata.name
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.awsAccountId
-          toFieldPath: spec.assumeRoleChain[0].roleARN
-          transforms:
-            - type: string
-              string:
-                type: Format
-                fmt: "arn:aws:iam::%s:role/urukube-crossplane-role"
-      readinessChecks:
-        - type: None
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: org-defaults
+            - type: Selector
+              selector:
+                matchLabels:
+                  - key: bu-id
+                    type: FromCompositeFieldPath
+                    valueFromFieldPath: spec.parameters.buId
 
     # -------------------------------------------------------------------------
-    # Bucket — the core S3 bucket resource.
-    # The composite resource name becomes the bucket name via external-name.
+    # Step 2 — Patch and transform all composed resources.
+    # FromEnvironmentFieldPath reads values from the merged environment
+    # resolved in step 1 and stamps them as AWS tags on the bucket.
     # -------------------------------------------------------------------------
-    - name: bucket
-      base:
-        apiVersion: s3.aws.upbound.io/v1beta2
-        kind: Bucket
-        spec:
-          forProvider:
-            region: us-east-1
-      patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.region
-          toFieldPath: spec.forProvider.region
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: metadata.annotations["crossplane.io/external-name"]
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: spec.providerConfigRef.name
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          # -------------------------------------------------------------------
+          # ProviderConfig — one per composite, assumes urukube-crossplane-role
+          # in the target account via IRSA chained role assumption.
+          # -------------------------------------------------------------------
+          - name: provider-config
+            base:
+              apiVersion: aws.upbound.io/v1beta1
+              kind: ProviderConfig
+              spec:
+                credentials:
+                  source: IRSA
+                assumeRoleChain:
+                  - roleARN: placeholder
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.awsAccountId
+                toFieldPath: spec.assumeRoleChain[0].roleARN
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "arn:aws:iam::%s:role/urukube-crossplane-role"
+            readinessChecks:
+              - type: None
 
-    # -------------------------------------------------------------------------
-    # Encryption — SSE-S3 (AES256) always enabled. Non-configurable by design.
-    # -------------------------------------------------------------------------
-    - name: bucket-encryption
-      base:
-        apiVersion: s3.aws.upbound.io/v1beta1
-        kind: BucketServerSideEncryptionConfiguration
-        spec:
-          forProvider:
-            region: us-east-1
-            bucketSelector:
-              matchControllerRef: true
-            rule:
-              - applyServerSideEncryptionByDefault:
-                  - sseAlgorithm: AES256
-                bucketKeyEnabled: true
-      patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.region
-          toFieldPath: spec.forProvider.region
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: spec.providerConfigRef.name
+          # -------------------------------------------------------------------
+          # Bucket — the core S3 bucket resource.
+          # The composite resource name becomes the bucket name via external-name.
+          # -------------------------------------------------------------------
+          - name: bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta2
+              kind: Bucket
+              spec:
+                forProvider:
+                  region: us-east-1
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.annotations["crossplane.io/external-name"]
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.providerConfigRef.name
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: buId
+                toFieldPath: spec.forProvider.tags.BuId
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: costCenter
+                toFieldPath: spec.forProvider.tags.CostCenter
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: ownerEmail
+                toFieldPath: spec.forProvider.tags.OwnerEmail
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: orgName
+                toFieldPath: spec.forProvider.tags.OrgName
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: complianceScope
+                toFieldPath: spec.forProvider.tags.ComplianceScope
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: managedBy
+                toFieldPath: spec.forProvider.tags.ManagedBy
 
-    # -------------------------------------------------------------------------
-    # Versioning — toggleable via spec.parameters.versioning (default: false).
-    # -------------------------------------------------------------------------
-    - name: bucket-versioning
-      base:
-        apiVersion: s3.aws.upbound.io/v1beta1
-        kind: BucketVersioning
-        spec:
-          forProvider:
-            region: us-east-1
-            bucketSelector:
-              matchControllerRef: true
-            versioningConfiguration:
-              - status: Suspended
-      patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.region
-          toFieldPath: spec.forProvider.region
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.versioning
-          toFieldPath: spec.forProvider.versioningConfiguration[0].status
-          transforms:
-            - type: convert
-              convert:
-                toType: string
-            - type: map
-              map:
-                "true": Enabled
-                "false": Suspended
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: spec.providerConfigRef.name
+          # -------------------------------------------------------------------
+          # Encryption — SSE-S3 (AES256) always enabled. Non-configurable by design.
+          # -------------------------------------------------------------------
+          - name: bucket-encryption
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketServerSideEncryptionConfiguration
+              spec:
+                forProvider:
+                  region: us-east-1
+                  bucketSelector:
+                    matchControllerRef: true
+                  rule:
+                    - applyServerSideEncryptionByDefault:
+                        - sseAlgorithm: AES256
+                      bucketKeyEnabled: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.providerConfigRef.name
 
-    # -------------------------------------------------------------------------
-    # Public access block — all public access blocked. Non-configurable by design.
-    # -------------------------------------------------------------------------
-    - name: bucket-public-access-block
-      base:
-        apiVersion: s3.aws.upbound.io/v1beta1
-        kind: BucketPublicAccessBlock
-        spec:
-          forProvider:
-            region: us-east-1
-            bucketSelector:
-              matchControllerRef: true
-            blockPublicAcls: true
-            blockPublicPolicy: true
-            ignorePublicAcls: true
-            restrictPublicBuckets: true
-      patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.parameters.region
-          toFieldPath: spec.forProvider.region
-        - type: FromCompositeFieldPath
-          fromFieldPath: metadata.name
-          toFieldPath: spec.providerConfigRef.name
+          # -------------------------------------------------------------------
+          # Versioning — toggleable via spec.parameters.versioning (default: false).
+          # -------------------------------------------------------------------
+          - name: bucket-versioning
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketVersioning
+              spec:
+                forProvider:
+                  region: us-east-1
+                  bucketSelector:
+                    matchControllerRef: true
+                  versioningConfiguration:
+                    - status: Suspended
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.versioning
+                toFieldPath: spec.forProvider.versioningConfiguration[0].status
+                transforms:
+                  - type: convert
+                    convert:
+                      toType: string
+                  - type: map
+                    map:
+                      "true": Enabled
+                      "false": Suspended
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.providerConfigRef.name
+
+          # -------------------------------------------------------------------
+          # Public access block — all public access blocked. Non-configurable by design.
+          # -------------------------------------------------------------------
+          - name: bucket-public-access-block
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketPublicAccessBlock
+              spec:
+                forProvider:
+                  region: us-east-1
+                  bucketSelector:
+                    matchControllerRef: true
+                  blockPublicAcls: true
+                  blockPublicPolicy: true
+                  ignorePublicAcls: true
+                  restrictPublicBuckets: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.providerConfigRef.name
