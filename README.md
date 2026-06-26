@@ -2,6 +2,10 @@
 
 Crossplane XRD package that provides a self-service S3 bucket golden path for the `urukube` platform. ArgoCD auto-discovers this repo via the `platform-custom-xrds` GitHub topic and deploys it to `crossplane-system` on the orchestrator cluster.
 
+## Composition pipeline
+
+![Composition flowchart](assets/composition-flowchart.svg)
+
 ## What gets provisioned
 
 Every `US3Bucket` claim creates four AWS resources in the target account:
