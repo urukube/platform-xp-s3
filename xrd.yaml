@@ -46,6 +46,19 @@ spec:
                       type: boolean
                       default: false
                       description: Enable S3 versioning on the bucket
+                    blockPublicAccess:
+                      type: boolean
+                      default: true
+                      description: Block all public access to the bucket. Set to false together with allowedCidrs to open access to specific IP ranges only.
+                    allowedCidrs:
+                      type: array
+                      items:
+                        type: string
+                      description: >-
+                        IP CIDRs granted public s3:GetObject access. Required when
+                        blockPublicAccess is false — a BucketPolicy scoped to these
+                        ranges is created automatically. Has no effect when
+                        blockPublicAccess is true.
                     tags:
                       type: object
                       additionalProperties:

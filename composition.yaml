@@ -172,7 +172,8 @@ spec:
                 toFieldPath: spec.providerConfigRef.name
 
           # -------------------------------------------------------------------
-          # Public access block — all public access blocked. Non-configurable by design.
+          # Public access block — all four flags driven by spec.parameters.blockPublicAccess
+          # (default: true). Set to false only when a bucket-policy IP allowlist is needed.
           # -------------------------------------------------------------------
           - name: bucket-public-access-block
             base:
@@ -194,3 +195,68 @@ spec:
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
                 toFieldPath: spec.providerConfigRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.blockPublicAccess
+                toFieldPath: spec.forProvider.blockPublicAcls
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.blockPublicAccess
+                toFieldPath: spec.forProvider.blockPublicPolicy
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.blockPublicAccess
+                toFieldPath: spec.forProvider.ignorePublicAcls
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.blockPublicAccess
+                toFieldPath: spec.forProvider.restrictPublicBuckets
+
+    # -------------------------------------------------------------------------
+    # Step 3 — Conditionally create an IP-allowlist BucketPolicy.
+    # Only runs when blockPublicAccess is false AND allowedCidrs is non-empty.
+    # The policy grants s3:GetObject to the listed CIDRs and denies everyone else,
+    # so the bucket is never openly public even with the block flags lowered.
+    # -------------------------------------------------------------------------
+    - step: ip-allowlist-policy
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $params := .observed.composite.resource.spec.parameters -}}
+            {{- $name := .observed.composite.resource.metadata.name -}}
+            {{- $claimName := index .observed.composite.resource.metadata.labels "crossplane.io/claim-name" -}}
+            {{- if and (not $params.blockPublicAccess) $params.allowedCidrs -}}
+            {{- $policy := dict "Version" "2012-10-17" "Statement" (list
+                (dict
+                  "Sid"       "AllowIPAllowlist"
+                  "Effect"    "Allow"
+                  "Principal" "*"
+                  "Action"    "s3:GetObject"
+                  "Resource"  (printf "arn:aws:s3:::%s/*" $claimName)
+                  "Condition" (dict "IpAddress" (dict "aws:SourceIp" $params.allowedCidrs))
+                )
+                (dict
+                  "Sid"       "DenyNonAllowlistIPs"
+                  "Effect"    "Deny"
+                  "Principal" "*"
+                  "Action"    "s3:GetObject"
+                  "Resource"  (printf "arn:aws:s3:::%s/*" $claimName)
+                  "Condition" (dict "NotIpAddress" (dict "aws:SourceIp" $params.allowedCidrs))
+                )
+              ) -}}
+            ---
+            apiVersion: s3.aws.upbound.io/v1beta1
+            kind: BucketPolicy
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: bucket-policy
+            spec:
+              forProvider:
+                region: {{ $params.region }}
+                bucketSelector:
+                  matchControllerRef: true
+                policy: {{ toJson $policy | quote }}
+              providerConfigRef:
+                name: {{ $name }}
+            {{- end }}
